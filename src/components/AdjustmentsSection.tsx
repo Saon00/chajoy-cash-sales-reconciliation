@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { sanitizeNumber, formatCurrency } from '../utils/calculator';
 import { 
   ArrowDownCircle, 
@@ -52,26 +52,45 @@ export const AdjustmentsSection: React.FC<AdjustmentsSectionProps> = ({
     }
   };
 
-  // When manager changes withdrawal, update next day petty cash automatically
+  // Custom Petty Cash state: when checked/active, editing petty cash won't alter cash withdrawal
+  const [isCustomPettyCash, setIsCustomPettyCash] = useState<boolean>(false);
+
+  // When manager changes withdrawal, update next day petty cash automatically if NOT in custom mode
   const handleWithdrawalChange = (valStr: string) => {
     const withdrawal = Math.max(0, sanitizeNumber(valStr));
     onCashWithdrawalChange(withdrawal);
-    const calculatedPetty = Math.max(0, Math.round((totalPhysicalCash - withdrawal) * 100) / 100);
-    onNextDayPettyCashChange(calculatedPetty);
+    if (!isCustomPettyCash) {
+      const calculatedPetty = Math.max(0, Math.round((totalPhysicalCash - withdrawal) * 100) / 100);
+      onNextDayPettyCashChange(calculatedPetty);
+    }
   };
 
-  // When manager changes next day petty cash directly, update withdrawal
+  // When manager changes next day petty cash directly, DO NOT alter withdrawal!
   const handleNextDayPettyChange = (valStr: string) => {
     const petty = Math.max(0, sanitizeNumber(valStr));
     onNextDayPettyCashChange(petty);
-    const calculatedWithdrawal = Math.max(0, Math.round((totalPhysicalCash - petty) * 100) / 100);
-    onCashWithdrawalChange(calculatedWithdrawal);
+    // Mark as custom so withdrawal amount is kept safe and untouched
+    setIsCustomPettyCash(true);
+  };
+
+  // Toggle Custom Mode on/off
+  const handleToggleCustomPetty = (checked: boolean) => {
+    setIsCustomPettyCash(checked);
+    if (!checked) {
+      // Revert to auto calculation: Total Drawer - Withdrawal
+      const calculatedPetty = Math.max(0, Math.round((totalPhysicalCash - cashWithdrawal) * 100) / 100);
+      onNextDayPettyCashChange(calculatedPetty);
+    }
   };
 
   const handleSetFloatPreset = (floatAmount: number) => {
-    const petty = Math.min(totalPhysicalCash, floatAmount);
-    onNextDayPettyCashChange(petty);
-    onCashWithdrawalChange(Math.max(0, Math.round((totalPhysicalCash - petty) * 100) / 100));
+    if (isCustomPettyCash) {
+      onNextDayPettyCashChange(floatAmount);
+    } else {
+      const petty = Math.min(totalPhysicalCash, floatAmount);
+      onNextDayPettyCashChange(petty);
+      onCashWithdrawalChange(Math.max(0, Math.round((totalPhysicalCash - petty) * 100) / 100));
+    }
   };
 
   return (
@@ -240,14 +259,36 @@ export const AdjustmentsSection: React.FC<AdjustmentsSectionProps> = ({
           </div>
 
           {/* Next Day Petty Cash (Tomorrow's Opening Float) */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
+          <div className={`p-2.5 rounded-lg border transition ${isCustomPettyCash ? 'bg-amber-50/50 border-amber-200' : 'bg-transparent border-transparent'}`}>
+            <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
               <label className="text-xs font-bold text-[#1A281F] flex items-center gap-1.5">
                 <PiggyBank className="w-3.5 h-3.5 text-amber-600" />
                 <span>Next Day Petty Cash (Tomorrow Float)</span>
               </label>
-              <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1 rounded">Left in Drawer</span>
+
+              <div className="flex items-center gap-1.5">
+                {/* Custom Tick Option */}
+                <label className="inline-flex items-center gap-1 cursor-pointer text-[10px] font-bold text-[#2E6B42] bg-white hover:bg-[#F0F6F2] px-2 py-0.5 rounded border border-[#CBDAD0] transition select-none shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={isCustomPettyCash}
+                    onChange={(e) => handleToggleCustomPetty(e.target.checked)}
+                    className="w-3 h-3 rounded text-[#2E6B42] focus:ring-[#5A9E6F] cursor-pointer accent-[#2E6B42]"
+                  />
+                  <span>Custom</span>
+                </label>
+
+                {/* Mode Badge */}
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                  isCustomPettyCash 
+                    ? 'text-amber-800 bg-amber-100 border border-amber-200' 
+                    : 'text-emerald-700 bg-emerald-50 border border-emerald-100'
+                }`}>
+                  {isCustomPettyCash ? 'Custom Amount' : 'Auto (Drawer − Withdrawal)'}
+                </span>
+              </div>
             </div>
+
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-[#2E6B42]">৳</span>
               <input
@@ -258,12 +299,30 @@ export const AdjustmentsSection: React.FC<AdjustmentsSectionProps> = ({
                 placeholder="0"
                 value={nextDayPettyCash === 0 ? '' : nextDayPettyCash}
                 onChange={(e) => handleNextDayPettyChange(e.target.value)}
-                className="w-full bg-white border border-[#CBDAD0] rounded-md pl-8 pr-3 py-2 text-sm font-bold font-mono-numbers text-[#2E6B42] focus:outline-none focus:ring-2 focus:ring-[#5A9E6F] transition"
+                className={`w-full bg-white border rounded-md pl-8 pr-3 py-2 text-sm font-bold font-mono-numbers transition focus:outline-none focus:ring-2 focus:ring-[#5A9E6F] ${
+                  isCustomPettyCash 
+                    ? 'border-amber-300 text-amber-900 focus:border-amber-500' 
+                    : 'border-[#CBDAD0] text-[#2E6B42]'
+                }`}
               />
             </div>
-            <span className="text-[10px] text-[#5F7364] mt-1 block">
-              Remaining cash kept inside the till for tomorrow morning's float.
-            </span>
+
+            <div className="flex items-center justify-between mt-1 text-[10px] text-[#5F7364]">
+              <span>
+                {isCustomPettyCash 
+                  ? 'Custom petty cash entered independently (withdrawal is NOT changed).' 
+                  : 'Remaining cash kept inside till (Total Drawer − Withdrawal).'}
+              </span>
+              {isCustomPettyCash && (
+                <button
+                  type="button"
+                  onClick={() => handleToggleCustomPetty(false)}
+                  className="text-emerald-700 hover:underline font-semibold ml-2 shrink-0 cursor-pointer"
+                >
+                  Reset to Auto
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
