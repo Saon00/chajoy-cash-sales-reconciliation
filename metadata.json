@@ -1,0 +1,6 @@
+{
+  "name": "Cha Joy - Daily Cash & Sales Reconciliation",
+  "description": "Daily store closing, cash denomination counter, non-cash reconciliation, and PDF slip generator for Cha Joy tea and beverage branches.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
