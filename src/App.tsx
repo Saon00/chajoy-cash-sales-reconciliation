@@ -21,6 +21,7 @@ import {
 } from './utils/storageService';
 import { downloadClosingPDF } from './utils/pdfGenerator';
 import { getFirebaseInstance } from './utils/firebase';
+import { CHA_JOY_LOGO_BASE64 } from './utils/logoBase64';
 import { 
   CheckCircle2, 
   AlertCircle, 
@@ -384,7 +385,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
           <div className="flex items-center gap-2">
             <img 
-              src="/assets/aistudio/14742841266_e8d19bff.png" 
+              src={CHA_JOY_LOGO_BASE64} 
               alt="Cha Joy" 
               className="w-5 h-5 object-contain rounded-full"
             />

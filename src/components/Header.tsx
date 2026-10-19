@@ -8,6 +8,7 @@ import {
   RotateCcw, 
   UserCheck
 } from 'lucide-react';
+import { CHA_JOY_LOGO_BASE64 } from '../utils/logoBase64';
 
 interface HeaderProps {
   storeBranch: StoreBranch;
@@ -48,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Brand Wordmark & Official Cha Joy Logo */}
           <div className="flex items-center gap-3 shrink-0">
             <img 
-              src="/assets/aistudio/14742841266_e8d19bff.png" 
+              src={CHA_JOY_LOGO_BASE64} 
               alt="Cha Joy - Ice Cream and Tea" 
               className="w-10 h-10 object-contain rounded-full shadow-xs bg-[#88B83D]/10 p-0.5"
             />

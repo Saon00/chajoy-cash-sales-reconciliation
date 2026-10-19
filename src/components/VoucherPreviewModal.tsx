@@ -2,6 +2,7 @@ import React from 'react';
 import { ClosingRecord } from '../types/reconciliation';
 import { formatCurrency } from '../utils/calculator';
 import { downloadClosingPDF } from '../utils/pdfGenerator';
+import { CHA_JOY_LOGO_BASE64 } from '../utils/logoBase64';
 import { 
   X, 
   FileDown, 
@@ -82,7 +83,7 @@ export const VoucherPreviewModal: React.FC<VoucherPreviewModalProps> = ({
           {/* Header Branding with Official Logo */}
           <div className="text-center pb-4 border-b border-dashed border-[#CBDAD0]">
             <img 
-              src="/assets/aistudio/14742841266_e8d19bff.png" 
+              src={CHA_JOY_LOGO_BASE64} 
               alt="Cha Joy - Ice Cream and Tea" 
               className="w-14 h-14 mx-auto object-contain rounded-full mb-1.5 shadow-2xs"
             />
