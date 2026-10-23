@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ClosingRecord } from '../types/reconciliation';
 import { formatCurrency } from '../utils/calculator';
 import { downloadClosingPDF } from '../utils/pdfGenerator';
@@ -7,7 +7,9 @@ import {
   X, 
   FileDown, 
   Printer, 
-  WalletCards
+  WalletCards,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface VoucherPreviewModalProps {
@@ -21,11 +23,87 @@ export const VoucherPreviewModal: React.FC<VoucherPreviewModalProps> = ({
   onClose,
   record,
 }) => {
+  const [copied, setCopied] = useState(false);
+
   if (!isOpen || !record) return null;
 
   const isMatched = record.totals.status === 'MATCHED';
   const isShortage = record.totals.status === 'SHORTAGE';
   const isSurplus = record.totals.status === 'SURPLUS';
+
+  // Build a clean formatted audit text for copying
+  const buildAuditText = (): string => {
+    const fc = (n: number) => formatCurrency(n, true, 'Tk');
+
+    // Format closing date (e.g. "Oct 21")
+    let dateShort = record.closingDate;
+    try {
+      const d = new Date(record.closingDate + 'T00:00:00');
+      dateShort = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (_) {}
+
+    const netCashExSpending = record.totals.netCashSales - record.dailyExpenses;
+    const differenceLabel = record.totals.difference >= 0 ? 'Sur Plus' : 'Shortage';
+    const differenceValue = record.totals.difference >= 0
+      ? fc(record.totals.difference)
+      : `- ${fc(Math.abs(record.totals.difference))}`;
+
+    const lines: string[] = [
+      `🧾 CHA JOY — Daily Closing Audit`,
+      `📅 ${dateShort}  |  ${record.storeBranch}`,
+      `👤 Manager: ${record.managerName || 'Store In-Charge'}  |  Shift: ${record.shift || 'Full Day'}`,
+      `─────────────────────────`,
+      `Cash Withdrawal (Bank/Owner) : ${fc(record.cashWithdrawal || 0)}`,
+      `Petty Left (Next Day Float)  : ${fc(record.nextDayPettyCash || 0)}`,
+      `Old Petty (Opening Float)    : ${fc(record.openingPettyCash)}`,
+      `Total Cash (Physical)        : ${fc(record.totals.totalPhysicalCash)}`,
+      `─────────────────────────`,
+      `Display Sale                 : ${fc(record.displaySales)}`,
+      `Sale in Cash (excl. spending): ${fc(netCashExSpending)}`,
+      `POS (Card / Machine)         : ${fc(record.posMachine)}`,
+      `bKash / MFS                  : ${fc(record.mfsTotal)}`,
+    ];
+
+    // Dynamic extra channels
+    if (record.dynamicFields && record.dynamicFields.length > 0) {
+      record.dynamicFields.forEach(f => {
+        const label = (f.name || 'Other Channel').padEnd(29);
+        lines.push(`${label}: ${fc(f.amount)}`);
+      });
+    }
+
+    lines.push(`Spending (Bazar/Expenses)    : ${fc(record.dailyExpenses)}`);
+    lines.push(`─────────────────────────`);
+    lines.push(`${differenceLabel.padEnd(29)}: ${differenceValue}`);
+
+    if (record.expenseDetails) {
+      lines.push(`─────────────────────────`);
+      lines.push(`Memo: ${record.expenseDetails}`);
+    }
+
+    lines.push(`─────────────────────────`);
+    lines.push(`Voucher: ${record.id}`);
+
+    return lines.join('\n');
+  };
+
+  const handleCopyText = async () => {
+    try {
+      await navigator.clipboard.writeText(buildAuditText());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback for older browsers
+      const el = document.createElement('textarea');
+      el.value = buildAuditText();
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -49,6 +127,21 @@ export const VoucherPreviewModal: React.FC<VoucherPreviewModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              id="copy-audit-text-btn"
+              type="button"
+              onClick={handleCopyText}
+              title="Copy audit summary as text"
+              className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border transition ${
+                copied
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-300'
+                  : 'text-[#1A281F] bg-white border-[#CBDAD0] hover:bg-neutral-50'
+              }`}
+            >
+              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-[#5A9E6F]" />}
+              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy Text'}</span>
+            </button>
+
             <button
               type="button"
               onClick={handlePrint}

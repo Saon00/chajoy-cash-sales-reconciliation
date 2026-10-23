@@ -126,15 +126,19 @@ export function generateClosingPDF(record: ClosingRecord): jsPDF {
 
   currentY += 16;
 
-  // 4. FINANCIAL EXECUTIVE KPI SUMMARY (4 CARDS)
-  const cardGap = 3;
-  const cardWidth = (contentWidth - (cardGap * 3)) / 4;
+  // 4. FINANCIAL EXECUTIVE KPI SUMMARY (5 CARDS)
+  // Net Cash excluding spending = netCashSales - dailyExpenses
+  const netCashExcludingSpending = Math.round((record.totals.netCashSales - record.dailyExpenses) * 100) / 100;
+
+  const cardGap = 2.5;
+  const cardWidth = (contentWidth - (cardGap * 4)) / 5;
 
   const kpis = [
-    { label: 'DISPLAY SALES', amount: record.displaySales, color: darkText, desc: 'POS Target' },
-    { label: 'NET CASH SALES', amount: record.totals.netCashSales, color: primaryForest, desc: '(Drawer - Float) + Bazar' },
-    { label: 'TOTAL NON-CASH', amount: record.totals.totalNonCash, color: darkText, desc: 'Cards + MFS + Channels' },
-    { label: 'TOTAL CALCULATED', amount: record.totals.totalCalculatedSales, color: primaryForest, desc: 'Net Cash + Non-Cash' },
+    { label: 'DISPLAY SALES',        amount: record.displaySales,              color: darkText,      desc: 'POS Target' },
+    { label: 'NET CASH SALES',        amount: record.totals.netCashSales,       color: primaryForest, desc: '(Drawer - Float) + Spending' },
+    { label: 'NET CASH (EX. SPEND)',  amount: netCashExcludingSpending,          color: primaryForest, desc: 'Excl. Spending / Bazar' },
+    { label: 'TOTAL NON-CASH',        amount: record.totals.totalNonCash,       color: darkText,      desc: 'Cards + MFS + Channels' },
+    { label: 'TOTAL CALCULATED',      amount: record.totals.totalCalculatedSales, color: primaryForest, desc: 'Net Cash + Non-Cash' },
   ];
 
   kpis.forEach((kpi, idx) => {
@@ -145,18 +149,18 @@ export function generateClosingPDF(record: ClosingRecord): jsPDF {
 
     doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
     doc.setFont('times', 'bold');
-    doc.setFontSize(7.5);
-    doc.text(kpi.label, kpiX + 4, currentY + 5);
+    doc.setFontSize(6.5);
+    doc.text(kpi.label, kpiX + 3, currentY + 5);
 
     doc.setTextColor(kpi.color[0], kpi.color[1], kpi.color[2]);
     doc.setFont('times', 'bold');
-    doc.setFontSize(11);
-    doc.text(formatPdfCurrency(kpi.amount), kpiX + 4, currentY + 11);
+    doc.setFontSize(9.5);
+    doc.text(formatPdfCurrency(kpi.amount), kpiX + 3, currentY + 11);
 
     doc.setTextColor(mutedText[0], mutedText[1], mutedText[2]);
     doc.setFont('times', 'italic');
-    doc.setFontSize(7);
-    doc.text(kpi.desc, kpiX + 4, currentY + 14.5);
+    doc.setFontSize(6.5);
+    doc.text(kpi.desc, kpiX + 3, currentY + 14.5);
   });
 
   currentY += 20;
@@ -363,37 +367,98 @@ export function generateClosingPDF(record: ClosingRecord): jsPDF {
 
   currentY += 20;
 
-  // 7. DETAILED AUDIT TRAIL & FORMULA SHEET
+  // 7. OFFICIAL CLOSING AUDIT TRAIL — LEDGER FORMAT
+  // Compute net cash excl. spending for the audit trail
+  const auditNetCashExSpending = Math.round((record.totals.netCashSales - record.dailyExpenses) * 100) / 100;
+
+  // Determine sur plus / shortage sign text
+  const differenceSign = record.totals.difference >= 0 ? 'Sur Plus' : 'Shortage';
+  const differenceDisplay = record.totals.difference >= 0
+    ? formatPdfCurrency(record.totals.difference)
+    : `- ${formatPdfCurrency(Math.abs(record.totals.difference))}`;
+
+  // Format closing date for the header (e.g. "Oct 21")
+  let closingDateShort = record.closingDate;
+  try {
+    const d = new Date(record.closingDate + 'T00:00:00');
+    closingDateShort = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch (_) {}
+
+  // Build the two-column ledger rows
+  // Left column: labels | Right column: values (right-aligned)
+  const auditRows: Array<{ label: string; value: string; isBold?: boolean; isHeader?: boolean; isHighlight?: boolean }> = [
+    { label: 'Cash Withdrawal (Bank / Owner)',                value: formatPdfCurrency(record.cashWithdrawal || 0) },
+    { label: 'Petty Left (Next Day Float)',                   value: formatPdfCurrency(record.nextDayPettyCash || 0) },
+    { label: 'Old Petty (Opening Float)',                     value: formatPdfCurrency(record.openingPettyCash) },
+    { label: 'Total Cash (Physical)',                         value: formatPdfCurrency(record.totals.totalPhysicalCash), isBold: true },
+    { label: 'Display Sale',                                  value: formatPdfCurrency(record.displaySales), isBold: true },
+    { label: 'Sale in Cash (without spending)',               value: formatPdfCurrency(auditNetCashExSpending), isBold: true, isHighlight: true },
+    { label: 'POS (Card / Machine)',                          value: formatPdfCurrency(record.posMachine) },
+    { label: 'bKash / MFS',                                   value: formatPdfCurrency(record.mfsTotal) },
+    { label: 'Spending (Daily Bazar / Expenses)',             value: formatPdfCurrency(record.dailyExpenses) },
+    { label: differenceSign,                                  value: differenceDisplay, isBold: true, isHighlight: true },
+  ];
+
+  // Dynamic extra non-cash channels inserted before Spending
+  if (record.dynamicFields && record.dynamicFields.length > 0) {
+    // insert after bKash row (index 7 now) — we rebuild with splice
+    record.dynamicFields.forEach((dyn, di) => {
+      auditRows.splice(8 + di, 0, { label: dyn.name || 'Other Channel', value: formatPdfCurrency(dyn.amount) });
+    });
+  }
+
+  const auditRowH = 5.5;
+  const auditHeaderH = 8;
+  const auditTotalH = auditHeaderH + (auditRows.length * auditRowH) + 2;
+
   doc.setFillColor(250, 252, 250);
   doc.setDrawColor(borderGrey[0], borderGrey[1], borderGrey[2]);
-  doc.roundedRect(margin, currentY, contentWidth, 20, 1.5, 1.5, 'FD');
+  doc.roundedRect(margin, currentY, contentWidth, auditTotalH, 1.5, 1.5, 'FD');
 
-  doc.setTextColor(primaryForest[0], primaryForest[1], primaryForest[2]);
+  // Header
+  doc.setFillColor(primaryForest[0], primaryForest[1], primaryForest[2]);
+  doc.roundedRect(margin, currentY, contentWidth, auditHeaderH, 1.5, 1.5, 'F');
+  // Re-draw bottom corners square so it looks flush with rows below
+  doc.setFillColor(primaryForest[0], primaryForest[1], primaryForest[2]);
+  doc.rect(margin, currentY + auditHeaderH - 3, contentWidth, 3, 'F');
+
+  doc.setTextColor(255, 255, 255);
   doc.setFont('times', 'bold');
-  doc.setFontSize(8);
-  doc.text('OFFICIAL CLOSING AUDIT TRAIL & LEDGER RECONCILIATION', margin + 6, currentY + 4.5);
+  doc.setFontSize(8.5);
+  doc.text('OFFICIAL CLOSING AUDIT — ' + closingDateShort.toUpperCase(), margin + 6, currentY + 5.5);
 
-  doc.setTextColor(darkText[0], darkText[1], darkText[2]);
-  doc.setFont('times', 'normal');
-  doc.setFontSize(7.5);
-  doc.text(
-    `1. Net Cash Sales = (Gross Physical Cash: ${formatPdfCurrency(record.totals.totalPhysicalCash)} - Opening Float: ${formatPdfCurrency(record.openingPettyCash)}) + Daily Bazar: ${formatPdfCurrency(record.dailyExpenses)} = ${formatPdfCurrency(record.totals.netCashSales)}`,
-    margin + 6,
-    currentY + 9
-  );
-  doc.text(
-    `2. Total Calculated Sales = Net Cash Sales: ${formatPdfCurrency(record.totals.netCashSales)} + Total Non-Cash: ${formatPdfCurrency(record.totals.totalNonCash)} = ${formatPdfCurrency(record.totals.totalCalculatedSales)}`,
-    margin + 6,
-    currentY + 13
-  );
-  doc.setFont('times', 'bold');
-  doc.text(
-    `3. Audit Variance = Total Calculated: ${formatPdfCurrency(record.totals.totalCalculatedSales)} - Display Sales: ${formatPdfCurrency(record.displaySales)} = ${record.totals.difference > 0 ? '+' : ''}${formatPdfCurrency(record.totals.difference)} (${record.totals.statusText})`,
-    margin + 6,
-    currentY + 17
-  );
+  currentY += auditHeaderH;
 
-  currentY += 23;
+  // Ledger rows
+  const labelColX = margin + 6;
+  const valueColX = margin + contentWidth - 6;
+
+  auditRows.forEach((row, idx) => {
+    const rowY = currentY + (idx * auditRowH);
+    // Alternate stripe
+    if (idx % 2 === 1) {
+      doc.setFillColor(243, 248, 245);
+      doc.rect(margin, rowY, contentWidth, auditRowH, 'F');
+    }
+    // Highlight rows (Sale in Cash, Sur Plus/Shortage)
+    if (row.isHighlight) {
+      doc.setFillColor(229, 243, 234);
+      doc.rect(margin, rowY, contentWidth, auditRowH, 'F');
+    }
+
+    // Label
+    doc.setTextColor(row.isBold ? darkText[0] : mutedText[0], row.isBold ? darkText[1] : mutedText[1], row.isBold ? darkText[2] : mutedText[2]);
+    doc.setFont('times', row.isBold ? 'bold' : 'normal');
+    doc.setFontSize(8);
+    doc.text(row.label, labelColX, rowY + 3.8);
+
+    // Value (right-aligned)
+    doc.setFont('times', row.isBold ? 'bold' : 'normal');
+    doc.setTextColor(row.isHighlight ? primaryForest[0] : darkText[0], row.isHighlight ? primaryForest[1] : darkText[1], row.isHighlight ? primaryForest[2] : darkText[2]);
+    doc.text(row.value, valueColX, rowY + 3.8, { align: 'right' });
+  });
+
+  currentY += (auditRows.length * auditRowH) + 4;
 
   // 8. EXPENSE DETAILS / BAZAR MEMO
   if (record.expenseDetails) {
